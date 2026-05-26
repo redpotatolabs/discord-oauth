@@ -67,8 +67,13 @@ type Config struct {
 	ClientSecret string
 	// PublicURL is the canonical public URL of the app (e.g.
 	// "https://nagbot.klinke.wtf"). The redirect URI is built as
-	// PublicURL + CallbackPath. Required.
+	// PublicURL + CallbackPath. Required unless RedirectURL is set.
 	PublicURL string
+	// RedirectURL, when non-empty, is used verbatim as the OAuth redirect
+	// URI instead of PublicURL + CallbackPath. For consumers (like roster)
+	// that store a full redirect URL in their own settings. When set,
+	// PublicURL becomes optional.
+	RedirectURL string
 	// Scopes defaults to {"identify", "guilds"} when nil/empty.
 	Scopes []string
 	// HTTPClient defaults to &http.Client{Timeout: 15*time.Second} when
@@ -92,14 +97,18 @@ func New(cfg Config) (*Client, error) {
 	if cfg.ClientSecret == "" {
 		return nil, errors.New("discord-oauth: Config.ClientSecret is required")
 	}
-	if cfg.PublicURL == "" {
-		return nil, errors.New("discord-oauth: Config.PublicURL is required")
+	if cfg.PublicURL == "" && cfg.RedirectURL == "" {
+		return nil, errors.New("discord-oauth: Config.PublicURL or Config.RedirectURL is required")
 	}
 	scopes := cfg.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{ScopeIdentify, ScopeGuilds}
 	}
 	publicURL := strings.TrimRight(cfg.PublicURL, "/")
+	redirectURL := cfg.RedirectURL
+	if redirectURL == "" {
+		redirectURL = publicURL + CallbackPath
+	}
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
@@ -109,7 +118,7 @@ func New(cfg Config) (*Client, error) {
 			ClientID:     cfg.ClientID,
 			ClientSecret: cfg.ClientSecret,
 			Endpoint:     discordOAuthEndpoint,
-			RedirectURL:  publicURL + CallbackPath,
+			RedirectURL:  redirectURL,
 			Scopes:       scopes,
 		},
 		httpClient: httpClient,

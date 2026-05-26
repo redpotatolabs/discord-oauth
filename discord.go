@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strconv"
+	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 )
@@ -103,8 +106,33 @@ func (p *PermissionsInt) UnmarshalJSON(data []byte) error {
 // FetchUser calls GET /users/@me. Returns an error when Discord rejects
 // the token, the network call fails, or the response body is unparseable.
 func (c *Client) FetchUser(ctx context.Context, token *oauth2.Token) (*User, error) {
+	return FetchUser(ctx, c.httpClient, token)
+}
+
+// FetchUserGuilds calls GET /users/@me/guilds. The slice is in Discord's
+// returned order (membership order, roughly join time).
+func (c *Client) FetchUserGuilds(ctx context.Context, token *oauth2.Token) ([]Guild, error) {
+	return FetchUserGuilds(ctx, c.httpClient, token)
+}
+
+// FetchGuildMemberRoles calls GET /users/@me/guilds/{guildID}/member and
+// returns the caller's role IDs in that guild. User-context: the token
+// must carry the guilds.members.read scope.
+func (c *Client) FetchGuildMemberRoles(ctx context.Context, token *oauth2.Token, guildID string) ([]string, error) {
+	return FetchGuildMemberRoles(ctx, c.httpClient, token, guildID)
+}
+
+// --- Package-level token-only fetch helpers ---
+//
+// These need only an *http.Client + an OAuth token, not a configured
+// Client. Consumers that already manage their own http.Client and tokens
+// (e.g. roster, which constructs OAuth settings per-request from its DB)
+// call these directly; the Client methods above delegate to them.
+
+// FetchUser calls GET /users/@me with the given token.
+func FetchUser(ctx context.Context, httpClient *http.Client, token *oauth2.Token) (*User, error) {
 	var u User
-	if err := c.fetchJSON(ctx, token, discordAPIBase+"/users/@me", &u); err != nil {
+	if err := fetchJSON(ctx, httpClient, token, discordAPIBase+"/users/@me", &u); err != nil {
 		return nil, err
 	}
 	if u.ID == "" {
@@ -113,24 +141,45 @@ func (c *Client) FetchUser(ctx context.Context, token *oauth2.Token) (*User, err
 	return &u, nil
 }
 
-// FetchUserGuilds calls GET /users/@me/guilds. The slice is in Discord's
-// returned order (membership order, roughly join time).
-func (c *Client) FetchUserGuilds(ctx context.Context, token *oauth2.Token) ([]Guild, error) {
+// FetchUserGuilds calls GET /users/@me/guilds with the given token.
+func FetchUserGuilds(ctx context.Context, httpClient *http.Client, token *oauth2.Token) ([]Guild, error) {
 	var guilds []Guild
-	if err := c.fetchJSON(ctx, token, discordAPIBase+"/users/@me/guilds", &guilds); err != nil {
+	if err := fetchJSON(ctx, httpClient, token, discordAPIBase+"/users/@me/guilds", &guilds); err != nil {
 		return nil, err
 	}
 	return guilds, nil
 }
 
-func (c *Client) fetchJSON(ctx context.Context, token *oauth2.Token, url string, out any) error {
+// FetchGuildMemberRoles calls GET /users/@me/guilds/{guildID}/member and
+// returns the caller's role IDs in that guild. The token must carry the
+// guilds.members.read scope; Discord answers 403/404 when it doesn't or
+// the member isn't found.
+func FetchGuildMemberRoles(ctx context.Context, httpClient *http.Client, token *oauth2.Token, guildID string) ([]string, error) {
+	guildID = strings.TrimSpace(guildID)
+	if guildID == "" {
+		return nil, errors.New("discord-oauth: guildID is required")
+	}
+	var out struct {
+		Roles []string `json:"roles"`
+	}
+	url := discordAPIBase + "/users/@me/guilds/" + neturl.PathEscape(guildID) + "/member"
+	if err := fetchJSON(ctx, httpClient, token, url, &out); err != nil {
+		return nil, err
+	}
+	return out.Roles, nil
+}
+
+func fetchJSON(ctx context.Context, httpClient *http.Client, token *oauth2.Token, url string, out any) error {
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 15 * time.Second}
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	req.Header.Set("Accept", "application/json")
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

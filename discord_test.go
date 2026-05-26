@@ -192,6 +192,64 @@ func TestNew_RejectsEmpty(t *testing.T) {
 	}
 }
 
+func TestNew_RedirectURLOverride(t *testing.T) {
+	// RedirectURL satisfies the "PublicURL or RedirectURL required" rule
+	// and is used verbatim.
+	c, err := New(Config{
+		ClientID:     "cid",
+		ClientSecret: "csec",
+		RedirectURL:  "https://app.example.com/oauth/cb",
+	})
+	if err != nil {
+		t.Fatalf("New with RedirectURL: %v", err)
+	}
+	if c.RedirectURL() != "https://app.example.com/oauth/cb" {
+		t.Errorf("RedirectURL = %q", c.RedirectURL())
+	}
+}
+
+func TestFetchGuildMemberRoles_AgainstStub(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/users/@me/guilds/g1/member" {
+			http.Error(w, "wrong path: "+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"roles":["r1","r2","r3"]}`))
+	}))
+	defer srv.Close()
+
+	prevBase := discordAPIBase
+	discordAPIBase = srv.URL
+	defer func() { discordAPIBase = prevBase }()
+
+	roles, err := FetchGuildMemberRoles(context.Background(), srv.Client(), &oauth2.Token{AccessToken: "tok"}, "g1")
+	if err != nil {
+		t.Fatalf("FetchGuildMemberRoles: %v", err)
+	}
+	if len(roles) != 3 || roles[0] != "r1" {
+		t.Errorf("roles = %v", roles)
+	}
+}
+
+func TestPackageFetchUser_TokenOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"u9","username":"zoe"}`))
+	}))
+	defer srv.Close()
+	prevBase := discordAPIBase
+	discordAPIBase = srv.URL
+	defer func() { discordAPIBase = prevBase }()
+
+	// No Client construction — just an http.Client + token.
+	u, err := FetchUser(context.Background(), srv.Client(), &oauth2.Token{AccessToken: "tok"})
+	if err != nil {
+		t.Fatalf("FetchUser: %v", err)
+	}
+	if u.ID != "u9" {
+		t.Errorf("user = %+v", u)
+	}
+}
+
 func contains(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
