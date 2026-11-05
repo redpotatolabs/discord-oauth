@@ -22,6 +22,7 @@ package discordoauth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -136,6 +137,33 @@ func (c *Client) RedirectURL() string { return c.config.RedirectURL }
 // on callback.
 func (c *Client) AuthCodeURL(state string) string {
 	return c.config.AuthCodeURL(state)
+}
+
+// ErrSignInAgain means a token can't be renewed, because the user revoked access or it was
+// issued without a refresh token. Only signing in again can fix that.
+var ErrSignInAgain = errors.New("discord-oauth: sign-in needed")
+
+// Refresh returns a usable token: the same one while it's valid, or a new one when it has
+// expired. Discord replaces the refresh token each time, so callers must save a new token
+// and must not refresh the same token twice at once. A failure that signing in would fix
+// matches ErrSignInAgain; any other error may be temporary.
+func (c *Client) Refresh(ctx context.Context, token *oauth2.Token) (*oauth2.Token, error) {
+	if token.Valid() {
+		return token, nil
+	}
+	if token.RefreshToken == "" {
+		return nil, ErrSignInAgain
+	}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
+	fresh, err := c.config.TokenSource(ctx, token).Token()
+	if err != nil {
+		var denied *oauth2.RetrieveError
+		if errors.As(err, &denied) && denied.Response != nil && denied.Response.StatusCode < 500 && denied.Response.StatusCode != http.StatusTooManyRequests {
+			return nil, fmt.Errorf("%w: %v", ErrSignInAgain, err)
+		}
+		return nil, err
+	}
+	return fresh, nil
 }
 
 // Exchange swaps an authorization code for an access token. Pass the

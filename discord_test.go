@@ -3,6 +3,7 @@ package discordoauth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -257,4 +258,70 @@ func contains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func refreshClient(t *testing.T, handler http.HandlerFunc) *Client {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	c, err := New(Config{ClientID: "id", ClientSecret: "secret", PublicURL: "https://example.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.config.Endpoint = oauth2.Endpoint{TokenURL: srv.URL, AuthStyle: oauth2.AuthStyleInParams}
+	return c
+}
+
+func TestRefreshKeepsAValidToken(t *testing.T) {
+	c := refreshClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("a valid token should not be refreshed")
+	})
+	token := &oauth2.Token{AccessToken: "a", RefreshToken: "r", Expiry: time.Now().Add(time.Hour)}
+	got, err := c.Refresh(context.Background(), token)
+	if err != nil || got != token {
+		t.Errorf("got %+v, err %v", got, err)
+	}
+}
+
+func TestRefreshRenewsAnExpiredToken(t *testing.T) {
+	c := refreshClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Error(err)
+		}
+		if r.PostForm.Get("grant_type") != "refresh_token" || r.PostForm.Get("refresh_token") != "old-refresh" {
+			t.Errorf("form = %v", r.PostForm)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new","refresh_token":"new-refresh","token_type":"Bearer","expires_in":604800}`))
+	})
+	got, err := c.Refresh(context.Background(), &oauth2.Token{AccessToken: "old", RefreshToken: "old-refresh", Expiry: time.Now().Add(-time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AccessToken != "new" || got.RefreshToken != "new-refresh" || !got.Valid() {
+		t.Errorf("got %+v", got)
+	}
+}
+
+func TestRefreshSaysWhenSigningInIsNeeded(t *testing.T) {
+	expired := func(refresh string) *oauth2.Token {
+		return &oauth2.Token{AccessToken: "old", RefreshToken: refresh, Expiry: time.Now().Add(-time.Hour)}
+	}
+	denied := refreshClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+	})
+	if _, err := denied.Refresh(context.Background(), expired("revoked")); !errors.Is(err, ErrSignInAgain) {
+		t.Errorf("revoked: %v", err)
+	}
+	if _, err := denied.Refresh(context.Background(), expired("")); !errors.Is(err, ErrSignInAgain) {
+		t.Errorf("no refresh token: %v", err)
+	}
+	down := refreshClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	})
+	if _, err := down.Refresh(context.Background(), expired("r")); err == nil || errors.Is(err, ErrSignInAgain) {
+		t.Errorf("an outage is temporary: %v", err)
+	}
 }

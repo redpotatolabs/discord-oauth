@@ -4,7 +4,7 @@ Discord OAuth2 + user-context REST helpers for epistemi Go services (nagbot, tat
 
 This module owns the OAuth flow (`AuthCodeURL`, `Exchange`) plus the user-context REST calls (`/users/@me`, `/users/@me/guilds`). It does **not** own:
 
-- Session storage — apps store the returned `*oauth2.Token` however they want.
+- Session storage — apps store the returned `*oauth2.Token` however they want. `Refresh` renews an expired one, and apps save the result.
 - CSRF — apps issue + verify their own tokens.
 - HTTP routing — apps wire login + callback handlers themselves.
 - Bot-token calls (`FetchBotGuilds`, `FetchGuildRoles`, etc.) — those stay per-app because the behaviors diverge (roster caches with TTL + stale-on-rate-limit; tater/nagbot read from in-memory discordgo state).
