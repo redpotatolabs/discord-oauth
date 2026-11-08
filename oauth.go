@@ -1,5 +1,5 @@
 // Package discordoauth provides Discord OAuth2 + user-context REST helpers
-// shared across epistemi web services (nagbot, tater, roster). It owns
+// shared across redpotatolabs web services (nagbot, tater, roster). It owns
 // only the OAuth flow and the /users/@me + /users/@me/guilds calls —
 // session storage, CSRF, routing, and bot-token REST are intentionally
 // left to consumers.
@@ -32,7 +32,7 @@ import (
 
 // CallbackPath is the path component of the OAuth redirect; consumers
 // mount their callback handler at this path. Constant by design — every
-// epistemi consumer uses /auth/callback.
+// redpotatolabs consumer uses /auth/callback.
 const CallbackPath = "/auth/callback"
 
 // Scope constants for clarity at the call site.

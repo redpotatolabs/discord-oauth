@@ -1,6 +1,6 @@
 # discord-oauth
 
-Discord OAuth2 + user-context REST helpers for epistemi Go services (nagbot, tater, roster).
+Discord OAuth2 + user-context REST helpers for redpotatolabs Go services (nagbot, tater, roster).
 
 This module owns the OAuth flow (`AuthCodeURL`, `Exchange`) plus the user-context REST calls (`/users/@me`, `/users/@me/guilds`). It does **not** own:
 
@@ -9,18 +9,18 @@ This module owns the OAuth flow (`AuthCodeURL`, `Exchange`) plus the user-contex
 - HTTP routing — apps wire login + callback handlers themselves.
 - Bot-token calls (`FetchBotGuilds`, `FetchGuildRoles`, etc.) — those stay per-app because the behaviors diverge (roster caches with TTL + stale-on-rate-limit; tater/nagbot read from in-memory discordgo state).
 
-See [`/home/roy/private/repos/discord-oauth-api.md`](https://github.com/epistemi/discord-oauth/blob/main/discord-oauth-api.md) (in the planning tree) for the full design rationale.
+See [`/home/roy/private/repos/discord-oauth-api.md`](https://github.com/redpotatolabs/discord-oauth/blob/main/discord-oauth-api.md) (in the planning tree) for the full design rationale.
 
 ## Install
 
 ```bash
-go get github.com/epistemi/discord-oauth@latest
+go get github.com/redpotatolabs/discord-oauth@latest
 ```
 
 ## Use
 
 ```go
-import "github.com/epistemi/discord-oauth"
+import "github.com/redpotatolabs/discord-oauth"
 
 c, err := discordoauth.New(discordoauth.Config{
     ClientID:     cfg.ClientID,

@@ -1,4 +1,4 @@
-module github.com/epistemi/discord-oauth
+module github.com/redpotatolabs/discord-oauth
 
 go 1.25.8
 
