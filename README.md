@@ -9,7 +9,7 @@ This module owns the OAuth flow (`AuthCodeURL`, `Exchange`) plus the user-contex
 - HTTP routing — apps wire login + callback handlers themselves.
 - Bot-token calls (`FetchBotGuilds`, `FetchGuildRoles`, etc.) — those stay per-app because the behaviors diverge (roster caches with TTL + stale-on-rate-limit; tater/nagbot read from in-memory discordgo state).
 
-See [`/home/roy/private/repos/discord-oauth-api.md`](https://github.com/redpotatolabs/discord-oauth/blob/main/discord-oauth-api.md) (in the planning tree) for the full design rationale.
+By default it asks Discord for the `identify` and `guilds` scopes.
 
 ## Install
 
