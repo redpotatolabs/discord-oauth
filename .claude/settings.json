@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "redpotatolabs": {
+      "source": {
+        "source": "github",
+        "repo": "redpotatolabs/claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "flow@redpotatolabs": true
+  }
+}
